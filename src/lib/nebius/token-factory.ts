@@ -9,16 +9,19 @@ export interface NemotronGenerationOptions {
 
 export class NebiusTokenFactoryClient {
   private static apiKey = process.env.NEBIUS_API_KEY || '';
-  private static baseUrl = process.env.NEBIUS_BASE_URL || 'https://api.tokenfactory.nebius.ai/v1';
+  private static baseUrl = (process.env.NEBIUS_BASE_URL || 'https://api.tokenfactory.nebius.com/v1').replace(/\/+$/, '');
 
   private static mapTierToModelName(tier: ModelTier): string {
+    if (process.env.NEBIUS_MODEL) {
+      return process.env.NEBIUS_MODEL;
+    }
     switch (tier) {
       case 'nemotron-nano':
-        return 'nvidia/nemotron-mini-4b-instruct';
+        return 'nebius/nvidia/Nemotron-3_5-Lightning';
       case 'nemotron-super':
-        return 'nvidia/llama-3.1-nemotron-70b-instruct';
+        return 'nebius/nvidia/nemotron-3-super-120b-a12b';
       case 'nemotron-3-ultra':
-        return 'nvidia/nemotron-4-340b-instruct';
+        return 'nebius/nvidia/Nemotron-3-Ultra-550b-a55b';
       case 'llama-3.1-nemotron-70b':
       default:
         return 'nvidia/llama-3.1-nemotron-70b-instruct';
