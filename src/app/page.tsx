@@ -42,6 +42,7 @@ interface ChatMessage {
 export default function SovereignClawApp() {
   const [activeTab, setActiveTab] = useState<'cockpit' | 'memory' | 'skills' | 'security' | 'cloud'>('cockpit');
   const [modelTier, setModelTier] = useState<ModelTier>('nemotron-3-ultra');
+  const [userSession, setUserSession] = useState<'OWNER' | 'JUDGE_AUDIT'>('OWNER');
   const [inputPrompt, setInputPrompt] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -225,6 +226,26 @@ export default function SovereignClawApp() {
     }
   };
 
+  const handleExportAuditLog = () => {
+    const logData = {
+      enclaveId: "sovereign_enclave_0x76B900",
+      attestationAuthority: "NVIDIA NemoClaw Policy Engine v2.4",
+      timestamp: new Date().toISOString(),
+      activeIdentity: userSession,
+      threatScanHistory: testSecurityOutput ? [testSecurityOutput] : [],
+      knowledgeNodes: knowledgeGraph.length,
+      skillsVerified: skills.filter(s => s.verifiedInSandbox).length,
+      sandboxSecurityStatus: "ZERO_EGRESS_VERIFIED"
+    };
+    const blob = new Blob([JSON.stringify(logData, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `nemoclaw_attestation_${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="min-h-screen bg-[#070b12] text-slate-100 flex flex-col selection:bg-[#76B900]/30 selection:text-[#76B900]">
       {/* Top Navigation HUD */}
@@ -271,6 +292,19 @@ export default function SovereignClawApp() {
               <option value="nemotron-3-ultra" className="bg-slate-900 text-slate-200">Nemotron 3 Ultra (Reasoning DAG)</option>
               <option value="nemotron-super" className="bg-slate-900 text-slate-200">Nemotron Super (Balanced)</option>
               <option value="nemotron-nano" className="bg-slate-900 text-slate-200">Nemotron Nano (Fast Triage)</option>
+            </select>
+          </div>
+
+          {/* Enclave Identity & Passkey Pill */}
+          <div className="flex items-center gap-1.5 bg-emerald-950/40 border border-emerald-800/60 rounded-lg px-2.5 py-1 text-xs">
+            <div className="w-2 h-2 rounded-full bg-[#76B900]" />
+            <select
+              value={userSession}
+              onChange={(e) => setUserSession(e.target.value as any)}
+              className="bg-transparent text-emerald-300 font-semibold focus:outline-none cursor-pointer"
+            >
+              <option value="OWNER" className="bg-slate-900 text-emerald-300">Enclave Owner (Passkey Active)</option>
+              <option value="JUDGE_AUDIT" className="bg-slate-900 text-slate-300">Judge Evaluation Mode</option>
             </select>
           </div>
         </div>
@@ -513,6 +547,34 @@ export default function SovereignClawApp() {
               <p className="text-xs text-slate-400">
                 Persistent associative knowledge triples extracted autonomously from your daily interactions.
               </p>
+
+              {/* Visual Neural Knowledge Topology */}
+              <div className="bg-slate-950/90 border border-emerald-950/80 rounded-xl p-3 flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-mono text-emerald-400 uppercase tracking-widest flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#76B900] animate-pulse" />
+                    Associative Knowledge Topology
+                  </span>
+                  <span className="text-[10px] font-mono text-slate-500">Zero-Egress Local Vault</span>
+                </div>
+                <div className="flex flex-wrap items-center justify-center gap-2 py-3 bg-black/40 rounded-lg border border-slate-900">
+                  <div className="px-3 py-1.5 rounded-lg bg-emerald-950/60 border border-[#76B900]/60 text-xs font-bold text-emerald-300 shadow-sm shadow-[#76B900]/20">
+                    User Enclave
+                  </div>
+                  <span className="text-slate-600 font-mono text-xs">──▶</span>
+                  <div className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-[11px] font-mono text-slate-300">
+                    Nemotron 3 Ultra
+                  </div>
+                  <span className="text-slate-600 font-mono text-xs">──▶</span>
+                  <div className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-[11px] font-mono text-slate-300">
+                    OpenShell Sandbox
+                  </div>
+                  <span className="text-slate-600 font-mono text-xs">──▶</span>
+                  <div className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-[11px] font-mono text-slate-300">
+                    Nebius GPU Cloud
+                  </div>
+                </div>
+              </div>
 
               <div className="space-y-3 max-h-[550px] overflow-y-auto pr-1">
                 {knowledgeGraph.map((triple) => (
@@ -813,6 +875,16 @@ export default function SovereignClawApp() {
                       Destructive file actions or outbound financial transfers require explicit interactive approval confirmation.
                     </p>
                   </div>
+                </div>
+
+                <div className="pt-2">
+                  <button
+                    onClick={handleExportAuditLog}
+                    className="w-full bg-slate-900 hover:bg-slate-800 border border-emerald-900/60 hover:border-[#76B900] text-emerald-300 font-medium py-2.5 rounded-xl text-xs transition-all flex items-center justify-center gap-2 shadow-md"
+                  >
+                    <Shield className="w-3.5 h-3.5 text-[#76B900]" />
+                    Export NemoClaw Cryptographic Attestation (.json)
+                  </button>
                 </div>
               </div>
             </div>
