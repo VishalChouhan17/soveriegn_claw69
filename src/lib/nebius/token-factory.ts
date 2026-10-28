@@ -12,20 +12,26 @@ export class NebiusTokenFactoryClient {
   private static baseUrl = (process.env.NEBIUS_BASE_URL || 'https://api.tokenfactory.nebius.com/v1').replace(/\/+$/, '');
 
   private static mapTierToModelName(tier: ModelTier): string {
-    if (process.env.NEBIUS_MODEL) {
-      return process.env.NEBIUS_MODEL;
+    let model = process.env.NEBIUS_MODEL;
+    if (!model) {
+      switch (tier) {
+        case 'nemotron-nano':
+          model = 'nvidia/Nemotron-3_5-Lightning';
+          break;
+        case 'nemotron-super':
+          model = 'nvidia/nemotron-3-super-120b-a12b';
+          break;
+        case 'nemotron-3-ultra':
+          model = 'nvidia/Nemotron-3-Ultra-550b-a55b';
+          break;
+        case 'llama-3.1-nemotron-70b':
+        default:
+          model = 'nvidia/llama-3.1-nemotron-70b-instruct';
+          break;
+      }
     }
-    switch (tier) {
-      case 'nemotron-nano':
-        return 'nebius/nvidia/Nemotron-3_5-Lightning';
-      case 'nemotron-super':
-        return 'nebius/nvidia/nemotron-3-super-120b-a12b';
-      case 'nemotron-3-ultra':
-        return 'nebius/nvidia/Nemotron-3-Ultra-550b-a55b';
-      case 'llama-3.1-nemotron-70b':
-      default:
-        return 'nvidia/llama-3.1-nemotron-70b-instruct';
-    }
+    // Nebius API expects models with 'nvidia/' prefix, stripping accidental 'nebius/' namespace
+    return model.replace(/^nebius\//, '');
   }
 
   /**
@@ -68,10 +74,13 @@ export class NebiusTokenFactoryClient {
           const text = data.choices?.[0]?.message?.content || '';
           return {
             text,
-            modelUsed: modelName,
+            modelUsed: `${modelName} (Live Nebius Token Factory)`,
             tokensUsed: data.usage?.total_tokens || Math.ceil(text.length / 4),
             latencyMs: Date.now() - startTime
           };
+        } else {
+          const errText = await response.text();
+          console.warn('Nebius Token Factory API Error:', response.status, errText);
         }
       } catch (err) {
         console.warn('Nebius Token Factory call failed, switching to high-fidelity agentic fallback:', err);
