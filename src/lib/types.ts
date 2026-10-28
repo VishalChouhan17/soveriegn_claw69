@@ -38,6 +38,10 @@ export interface SandboxExecutionResult {
   exitCode: number;
   durationMs: number;
   memoryUsedMb: number;
+  cgroupMemoryLimitMb?: number;
+  cpuQuotaPct?: number;
+  seccompFilterStatus?: string;
+  egressPolicy?: string;
   sandboxViolations: string[];
   isolatedPath: string;
   success: boolean;
@@ -66,6 +70,11 @@ export interface ProceduralSkill {
   id: string;
   name: string;
   description: string;
+  version?: string;
+  runtime?: string;
+  securityProfile?: string;
+  author?: string;
+  yamlHeader?: string;
   language: 'python' | 'javascript';
   code: string;
   inputs: Record<string, string>;

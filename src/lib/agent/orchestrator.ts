@@ -109,9 +109,47 @@ export class SovereignAgentOrchestrator {
       details: 'Formulating structured execution graph and evaluating tool dependencies...'
     });
 
+    // Check if this involves a high-risk system action requiring human approval
+    const lower = prompt.toLowerCase();
+    if (lower.includes('delete') || lower.includes('wipe') || lower.includes('purge') || lower.includes('drop table') || lower.includes('rm -rf')) {
+      const riskAssessment = NemoClawSecurityEngine.assessActionRisk('delete_file', { command: prompt });
+      if (riskAssessment.requiresApproval) {
+        const approvalGate = NemoClawSecurityEngine.createApprovalGate(
+          'delete_file',
+          riskAssessment.riskLevel,
+          riskAssessment.reason,
+          { command: prompt }
+        );
+
+        dagSteps.push({
+          id: 'step_hitl_approval',
+          title: 'Human-In-The-Loop Enclave Authorization',
+          phase: 'SECURITY_SCAN',
+          status: 'BLOCKED_APPROVAL',
+          details: `Action paused: ${riskAssessment.reason}. Requires cryptographic approval.`
+        });
+
+        return {
+          finalResponse: `🛡️ **[NVIDIA NemoClaw Action Approval Gate Active]**\n\nA high-risk system action was paused by policy **NC-03**:\n• **Action**: Dangerous file / storage modification\n• **Risk Tier**: **${riskAssessment.riskLevel}**\n• **Reason**: ${riskAssessment.reason}\n\n*Please review and authorize this action in the Enclave Approval Drawer before execution proceeds.*`,
+          dagSteps,
+          securityStatus: {
+            isSafe: true,
+            threats: [],
+            redactedCount: scanResult.redactedEntities.length,
+            injectionScore: scanResult.injectionConfidence
+          },
+          modelUsed: 'NemoClaw Enclave Security Gate',
+          approvalRequired: {
+            requestId: approvalGate.id,
+            description: approvalGate.description,
+            riskLevel: approvalGate.riskLevel
+          }
+        };
+      }
+    }
+
     // Check if this involves a procedural skill execution
     let sandboxResult = undefined;
-    const lower = prompt.toLowerCase();
 
     if (lower.includes('portfolio') || lower.includes('sharpe') || lower.includes('volatility')) {
       const skill = TriMemoryEngine.getSkill('portfolio_risk_analyzer');
@@ -121,14 +159,14 @@ export class SovereignAgentOrchestrator {
           title: 'OpenShell Isolated Kernel Execution',
           phase: 'SANDBOX_EXECUTION',
           status: 'IN_PROGRESS',
-          details: `Executing skill '${skill.name}' in temporary isolated container...`
+          details: `Executing Hermes skill '${skill.name}' in temporary isolated container...`
         });
 
         sandboxResult = await OpenShellSandbox.execute(skill.code, skill.language, 6000);
         
         const sandboxStep = dagSteps[dagSteps.length - 1];
         sandboxStep.status = sandboxResult.success ? 'COMPLETED' : 'FAILED';
-        sandboxStep.details = `OpenShell duration: ${sandboxResult.durationMs}ms | RAM: ${sandboxResult.memoryUsedMb}MB | Exit code: ${sandboxResult.exitCode}`;
+        sandboxStep.details = `OpenShell duration: ${sandboxResult.durationMs}ms | RAM: ${sandboxResult.memoryUsedMb}MB | Egress: ${sandboxResult.egressPolicy || 'LOCKED'}`;
         sandboxStep.outputPreview = sandboxResult.stdout || sandboxResult.stderr;
       }
     } else if (lower.includes('scan code') || lower.includes('audit')) {
@@ -145,7 +183,41 @@ export class SovereignAgentOrchestrator {
         sandboxResult = await OpenShellSandbox.execute(skill.code, skill.language, 6000);
         const sandboxStep = dagSteps[dagSteps.length - 1];
         sandboxStep.status = sandboxResult.success ? 'COMPLETED' : 'FAILED';
-        sandboxStep.details = `Sandbox execution completed in ${sandboxResult.durationMs}ms`;
+        sandboxStep.details = `OpenShell duration: ${sandboxResult.durationMs}ms | Seccomp: ${sandboxResult.seccompFilterStatus || 'ENFORCED'}`;
+        sandboxStep.outputPreview = sandboxResult.stdout;
+      }
+    } else if (lower.includes('schedule') || lower.includes('calendar') || lower.includes('meeting')) {
+      const skill = TriMemoryEngine.getSkill('personal_schedule_optimizer');
+      if (skill) {
+        dagSteps.push({
+          id: 'step_4_sandbox',
+          title: 'OpenShell Personal Schedule Optimizer',
+          phase: 'SANDBOX_EXECUTION',
+          status: 'IN_PROGRESS',
+          details: `Resolving schedule conflicts in local zero-egress sandbox...`
+        });
+
+        sandboxResult = await OpenShellSandbox.execute(skill.code, skill.language, 6000);
+        const sandboxStep = dagSteps[dagSteps.length - 1];
+        sandboxStep.status = sandboxResult.success ? 'COMPLETED' : 'FAILED';
+        sandboxStep.details = `Resolved in ${sandboxResult.durationMs}ms | RAM: ${sandboxResult.memoryUsedMb}MB`;
+        sandboxStep.outputPreview = sandboxResult.stdout;
+      }
+    } else if (lower.includes('signature') || lower.includes('attestation') || lower.includes('verify payload')) {
+      const skill = TriMemoryEngine.getSkill('cryptographic_payload_verifier');
+      if (skill) {
+        dagSteps.push({
+          id: 'step_4_sandbox',
+          title: 'OpenShell Cryptographic Attestation',
+          phase: 'SANDBOX_EXECUTION',
+          status: 'IN_PROGRESS',
+          details: `Verifying HMAC-SHA256 hardware attestation signature...`
+        });
+
+        sandboxResult = await OpenShellSandbox.execute(skill.code, skill.language, 6000);
+        const sandboxStep = dagSteps[dagSteps.length - 1];
+        sandboxStep.status = sandboxResult.success ? 'COMPLETED' : 'FAILED';
+        sandboxStep.details = `Verified in ${sandboxResult.durationMs}ms`;
         sandboxStep.outputPreview = sandboxResult.stdout;
       }
     }

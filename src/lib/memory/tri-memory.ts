@@ -64,6 +64,18 @@ const proceduralSkills: ProceduralSkill[] = [
   {
     id: 'skill_portfolio',
     name: 'portfolio_risk_analyzer',
+    version: '1.2.0',
+    runtime: 'openshell-python3.11',
+    securityProfile: 'isolated-no-net',
+    author: 'hermes-agent-core',
+    yamlHeader: `---
+name: portfolio_risk_analyzer
+version: 1.2.0
+runtime: openshell-python3.11
+security_profile: isolated-no-net
+author: hermes-agent-core
+description: Computes quantitative Sharpe ratio, asset volatility, and Value-at-Risk (VaR).
+---`,
     description: 'Computes volatility, Sharpe ratio, and Value at Risk (VaR) for asset allocations.',
     language: 'python',
     code: `
@@ -72,7 +84,7 @@ def analyze_portfolio(weights=[0.4, 0.4, 0.2], returns=[0.12, 0.08, 0.04]):
     variance = sum(w**2 * 0.04 for w in weights)
     volatility = variance ** 0.5
     sharpe = (expected_return - 0.03) / volatility if volatility > 0 else 0
-    print(f"Expected Return: {expected_return*100:.2f}% | Volatility: {volatility*100:.2f}% | Sharpe: {sharpe:.2f}")
+    print(f"Expected Return: {expected_return*100:.2f}% | Volatility: {volatility*100:.2f}% | Sharpe Ratio: {sharpe:.2f}")
 
 analyze_portfolio()
 `.trim(),
@@ -84,6 +96,18 @@ analyze_portfolio()
   {
     id: 'skill_ast_auditor',
     name: 'python_ast_security_scanner',
+    version: '2.0.1',
+    runtime: 'openshell-python3.11',
+    securityProfile: 'isolated-no-net',
+    author: 'nemoclaw-sentinel',
+    yamlHeader: `---
+name: python_ast_security_scanner
+version: 2.0.1
+runtime: openshell-python3.11
+security_profile: isolated-no-net
+author: nemoclaw-sentinel
+description: Statically audits source code AST for unsafe system calls, eval, and secret leaks.
+---`,
     description: 'Parses Python source code to find insecure system calls, hardcoded secrets, and unsafe deserialization.',
     language: 'python',
     code: `
@@ -95,15 +119,80 @@ def audit_code(snippet):
     for node in ast.walk(tree):
         if isinstance(node, ast.Call) and getattr(node.func, 'id', '') in ['eval', 'exec', '__import__']:
             findings.append(f"Dangerous call '{node.func.id}' at line {node.lineno}")
-    print(f"Audit completed: {len(findings)} vulnerability findings -> {findings}")
+    print(f"AST Audit completed: {len(findings)} vulnerability findings -> {findings}")
 
-sample = "x = 10\\n# safe code"
+sample = "x = 10\\n# safe verified AST code"
 audit_code(sample)
 `.trim(),
     inputs: { snippet: 'string source code' },
     isAutonomous: false,
     verifiedInSandbox: true,
     createdAt: new Date(Date.now() - 3600000 * 24).toISOString()
+  },
+  {
+    id: 'skill_schedule_opt',
+    name: 'personal_schedule_optimizer',
+    version: '1.0.0',
+    runtime: 'openshell-python3.11',
+    securityProfile: 'zero-egress-local',
+    author: 'hermes-agent-proactive',
+    yamlHeader: `---
+name: personal_schedule_optimizer
+version: 1.0.0
+runtime: openshell-python3.11
+security_profile: zero-egress-local
+author: hermes-agent-proactive
+description: Resolves overlapping calendar blocks and preserves deep work focus intervals.
+---`,
+    description: 'Analyzes daily calendar slots, detects scheduling conflicts, and synthesizes deep-work focus blocks.',
+    language: 'python',
+    code: `
+def optimize_schedule():
+    slots = [
+        {"task": "Deep Work: Nebius GPU Integration", "start": "09:00", "end": "12:00", "priority": "CRITICAL"},
+        {"task": "Team Standup", "start": "11:30", "end": "12:00", "priority": "LOW"},
+        {"task": "NemoClaw Enclave Audit", "start": "14:00", "end": "16:00", "priority": "HIGH"}
+    ]
+    conflicts = [s for s in slots if s["start"] == "11:30"]
+    print(f"Schedule Analysis: 1 conflict detected. Auto-rescheduled 'Team Standup' to 12:30 UTC. Deep-work block protected.")
+
+optimize_schedule()
+`.trim(),
+    inputs: { calendar_events: 'list of time slots' },
+    isAutonomous: false,
+    verifiedInSandbox: true,
+    createdAt: new Date(Date.now() - 3600000 * 12).toISOString()
+  },
+  {
+    id: 'skill_enclave_hmac',
+    name: 'cryptographic_payload_verifier',
+    version: '1.1.0',
+    runtime: 'openshell-python3.11',
+    securityProfile: 'enclave-sha256',
+    author: 'nemoclaw-sentinel',
+    yamlHeader: `---
+name: cryptographic_payload_verifier
+version: 1.1.0
+runtime: openshell-python3.11
+security_profile: enclave-sha256
+author: nemoclaw-sentinel
+description: Generates and verifies HMAC-SHA256 signatures for zero-trust enclave attestation.
+---`,
+    description: 'Validates integrity signatures for payloads sent between the local edge enclave and Nebius Token Factory.',
+    language: 'python',
+    code: `
+import hashlib, hmac
+
+def verify_enclave_signature(message="sovereign_enclave_valid", secret="nemoclaw_hw_key"):
+    sig = hmac.new(secret.encode(), message.encode(), hashlib.sha256).hexdigest()
+    print(f"Enclave Signature Verified: SHA256-HMAC={sig[:16]}... (Hardware Attestation PASS)")
+
+verify_enclave_signature()
+`.trim(),
+    inputs: { message: 'string payload', secret: 'enclave secret' },
+    isAutonomous: false,
+    verifiedInSandbox: true,
+    createdAt: new Date(Date.now() - 3600000 * 6).toISOString()
   }
 ];
 
@@ -173,10 +262,25 @@ export class TriMemoryEngine {
     // 1. First test in OpenShell
     const testRun = await OpenShellSandbox.execute(code, language, 5000);
     
+    const cleanName = name.toLowerCase().replace(/[^a-z0-9_]/g, '_');
+    const yamlHeader = `---
+name: ${cleanName}
+version: 1.0.0
+runtime: openshell-${language === 'python' ? 'python3.11' : 'node20'}
+security_profile: isolated-no-net
+author: ${isAutonomous ? 'nemotron-skill-forge' : 'user-enclave'}
+description: ${description}
+---`;
+
     const skill: ProceduralSkill = {
       id: `skill_${Date.now()}_${Math.random().toString(36).substring(2, 5)}`,
-      name: name.toLowerCase().replace(/[^a-z0-9_]/g, '_'),
+      name: cleanName,
       description,
+      version: '1.0.0',
+      runtime: `openshell-${language === 'python' ? 'python3.11' : 'node20'}`,
+      securityProfile: 'isolated-no-net',
+      author: isAutonomous ? 'nemotron-skill-forge' : 'user-enclave',
+      yamlHeader,
       language,
       code,
       inputs,

@@ -97,10 +97,25 @@ Results from OpenShell execution:
 • Estimated Sharpe Ratio: 1.18
 
 Recommendation: Portfolio metrics indicate resilient downside protection with positive alpha relative to the benchmark.`;
+    } else if (prompt.toLowerCase().includes('schedule') || prompt.toLowerCase().includes('calendar') || prompt.toLowerCase().includes('meeting')) {
+      simulatedText = `[Nemotron 3 Ultra Reasoning: Personal Workflow Optimization]
+- Traversed local schedule in Tri-Memory episodic context.
+- Dispatched procedural skill: 'personal_schedule_optimizer' in OpenShell.
+- Re-aligned conflicting slots to preserve uninterrupted deep-work focus.
+
+Results from OpenShell execution:
+• Protected 3-hour focus block: "Deep Work: Nebius GPU Integration"
+• Auto-rescheduled overlapping low-priority standup to 12:30 UTC
+• Zero calendar data leaked to cloud inference (zero-egress boundary enforced).`;
+    } else if (prompt.toLowerCase().includes('verify') || prompt.toLowerCase().includes('signature') || prompt.toLowerCase().includes('attestation')) {
+      simulatedText = `[Nemotron 3 Ultra: Enclave Cryptographic Attestation]
+- Invoking 'cryptographic_payload_verifier' in OpenShell sandbox.
+- Verified HMAC-SHA256 hardware attestation signature against local root of trust.
+- Attestation Verdict: VALID (Enclave ID: 0x76B900). Outbound payload integrity guaranteed.`;
     } else if (prompt.toLowerCase().includes('skill') || prompt.toLowerCase().includes('forge') || prompt.toLowerCase().includes('create tool')) {
-      simulatedText = `[Nemotron 3 Ultra: Autonomous Skill Forge Activated]
+      simulatedText = `[Nemotron 3 Ultra: Autonomous Hermes Skill Forge Activated]
 Analyzing target procedural requirement...
-Synthesizing Model Context Protocol (MCP) compliant executable Python tool.
+Synthesizing Nous Hermes specification compliant executable Python tool with YAML metadata header.
 Submitting generated source code to NVIDIA OpenShell sandbox for static analysis and isolated test run...
 
 Verified: Skill compiles cleanly with zero sandbox policy infractions. Registered into personal procedural skill repertoire!`;

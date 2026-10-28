@@ -1,7 +1,18 @@
 {
   "name": "sovereign-claw",
   "version": "0.1.0",
-  "private": true,
+  "license": "Apache-2.0",
+  "description": "Zero-Trust Autonomous Personal AI Operating System built on NVIDIA Nemotron and Nebius Token Factory for the NVIDIA x Nebius Global AI Hackathon (Personal AI Track).",
+  "keywords": [
+    "nvidia",
+    "nebius",
+    "nemotron",
+    "nemoclaw",
+    "openshell",
+    "hermes-agent",
+    "personal-ai",
+    "hackathon"
+  ],
   "scripts": {
     "dev": "next dev",
     "build": "next build",

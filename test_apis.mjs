@@ -113,6 +113,41 @@ async function testAll() {
     return `HTTP ${r.status} | Threat Intercepted: ${!d.securityStatus?.isSafe} | Alert: ${d.finalResponse?.substring(0, 45)}...`;
   });
 
+  // 11. POST /api/chat (NemoClaw HITL Approval Gating)
+  let pendingRequestId = null;
+  await check("POST /api/chat (HITL Approval Gate)", async () => {
+    const r = await fetch(base + "/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Delete and wipe all system records and tables", tier: "nemotron-3-ultra" })
+    });
+    const d = await r.json();
+    pendingRequestId = d.approvalRequired?.requestId;
+    return `HTTP ${r.status} | Blocked for Approval: ${Boolean(d.approvalRequired)} | Risk: ${d.approvalRequired?.riskLevel}`;
+  });
+
+  // 12. POST /api/security (Resolve Enclave Approval)
+  await check("POST /api/security (Resolve Approval)", async () => {
+    const r = await fetch(base + "/api/security", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "resolve_approval", id: pendingRequestId || "mock_id", approved: true })
+    });
+    const d = await r.json();
+    return `HTTP ${r.status} | Approval resolved successfully: ${d.success}`;
+  });
+
+  // 13. POST /api/chat (Hermes Schedule Optimizer Skill)
+  await check("POST /api/chat (Hermes Schedule Skill)", async () => {
+    const r = await fetch(base + "/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: "Optimize my schedule and detect conflicts", tier: "nemotron-3-ultra" })
+    });
+    const d = await r.json();
+    return `HTTP ${r.status} | Model: ${d.modelUsed} | OpenShell Success: ${d.sandboxExecution?.success}`;
+  });
+
   console.log("\n=================== API HEALTH AUDIT RESULTS ===================");
   for (const res of results) {
     const badge = res.status === "PASS" ? "✅ [PASS]" : "❌ [FAIL]";
