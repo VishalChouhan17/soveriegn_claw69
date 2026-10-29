@@ -68,3 +68,9 @@ Integration checks launch a production server with a temporary data directory an
 See [deployment instructions](docs/DEPLOYMENT.md), [submission description and requirement mapping](docs/SUBMISSION.md), and the [three-minute video storyboard](docs/DEMO_VIDEO.md).
 
 NVIDIA model inference on Nebius is the required cloud integration. NemoClaw, OpenShell, Hermes Agent, and Nebius Serverless are not currently integrated. The implementation uses a custom privacy filter, bubblewrap, a Python skill registry, and a local background worker; no GPU performance, enclave, or serverless claims should be inferred from legacy internal class names.
+
+## Model not responding on Windows or WSL
+
+Open `.env.local` beside `package.json` (not `.env.example` and not `.env.local.txt`). Set `NEBIUS_MODEL=nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B`, the real `NEBIUS_API_KEY`, and `NEBIUS_BASE_URL=https://api.tokenfactory.nebius.com/v1`. This Nano model was verified with a real provider call on 29 October 2026; your account's catalog remains the authority on availability. Set `INFERENCE_MODE=live` for the submission. Stop and restart `npm run dev` after configuration changes.
+
+Run `npm run doctor:nebius` to check authentication and list available NVIDIA models. Then run `npm run doctor:nebius -- --infer` for a short live request. The diagnostic runs without the web server and does not print your key. `npm run test:live` additionally checks the running app. Model IDs are exact identifiers, not display labels such as “Nemotron Ultra.” The diagnostic inherits process environment variables, which override `.env.local`; remove stale shell variables if it reports a different configuration than you expect.

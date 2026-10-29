@@ -45,7 +45,7 @@ No external email/calendar account is connected. No hardware attestation, GPU la
 
 ## Fields that must be filled with real evidence
 
-- **Live NVIDIA model ID:** copy from the passing live test.
+- **Verified live NVIDIA model ID:** `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B` (production app test passed on 29 October 2026; rerun on your deployed host).
 - **Working demo URL:** add after deployment and HTTPS validation.
 - **Judge access:** use a separate demo instance with synthetic data; share its credentials through the appropriate private submission channel.
 - **Public YouTube URL:** add after recording and publication.

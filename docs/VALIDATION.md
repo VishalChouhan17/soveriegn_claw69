@@ -12,9 +12,15 @@ Validated on the managed Linux development environment with Node 24.19, system P
 
 ## Not yet verified
 
-- A real NVIDIA model call on Nebius: no usable Nebius key/model configuration was available during validation. Run `npm run test:live` after configuration.
+- Live credentials were unavailable during the original 28 October run; the 29 October follow-up below supersedes that limitation.
 - The public HTTPS deployment and continuously supervised production worker.
 - Docker image build/runtime or installation of the systemd service templates on a destination host. The native Linux app workflow is the tested deployment basis.
 - Public YouTube publication and final submission URLs.
 
 NemoClaw/OpenShell, Hermes Agent, Nebius Serverless, external mail/calendar integrations, hardware attestation, and multi-tenant isolation are not implemented or claimed.
+
+## Live inference follow-up — 29 October 2026
+
+The supplied Nebius key successfully authenticated against `/v1/models`. The saved `NEBIUS_MODEL` value did not match an available catalog ID. Using the explicit model `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B`, both a direct provider request and the production app's `npm run test:live` returned a real NVIDIA answer. The app test used temporary data and test-only owner authentication, and did not expose credential values. This verifies that model with the current account; it does not validate every catalog model or update the user's local Windows configuration automatically.
+
+The configuration fix trims whitespace, retains legacy namespace normalization, improves actionable errors, and provides `npm run doctor:nebius`. Production build, lint, and all 7 provider fixture tests passed. Public hosting and video publication remain outstanding.

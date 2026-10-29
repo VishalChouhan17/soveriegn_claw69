@@ -23,7 +23,8 @@
     "test:live": "node --env-file-if-exists=.env.local scripts/test-live.mjs",
     "test:integration": "node scripts/test-integration.mjs",
     "test:browser": "node scripts/test-integration.mjs --browser",
-    "test:provider": "node tests/provider.test.mjs"
+    "test:provider": "node tests/provider.test.mjs",
+    "doctor:nebius": "node --use-env-proxy --env-file-if-exists=.env.local scripts/doctor-nebius.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",

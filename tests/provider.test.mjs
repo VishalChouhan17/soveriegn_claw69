@@ -48,3 +48,14 @@ test('legacy provider prefixes are normalized for overrides and tier configurati
     assert.equal(r.modelUsed,'nvidia/test-nemotron (Live Nebius Token Factory)');
   }
 });
+
+test('configuration whitespace is trimmed and invalid model labels get actionable guidance',async () => {
+  let body;
+  await client({NEBIUS_API_KEY:' fixture ',NEBIUS_MODEL:' nvidia/test-nemotron ',NEBIUS_BASE_URL:' https://api.tokenfactory.nebius.com/v1 '},async (url,init) => {
+    assert.equal(url,'https://api.tokenfactory.nebius.com/v1/chat/completions');
+    assert.equal(init.headers.Authorization,'Bearer fixture'); body=JSON.parse(init.body);
+    return {ok:true,json:async () => ({choices:[{message:{content:'ok'}}]})};
+  }).generateResponse('hello',options);
+  assert.equal(body.model,'nvidia/test-nemotron'); assert.equal(body.max_tokens,2048);
+  await assert.rejects(client({NEBIUS_API_KEY:'fixture',NEBIUS_MODEL:'Nemotron Ultra'},() => {throw Error('unexpected fetch');}).generateResponse('hello',options),/doctor:nebius/);
+});
