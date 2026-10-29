@@ -1,0 +1,18 @@
+[Unit]
+Description=SovereignClaw private personal assistant
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=sovereign
+WorkingDirectory=/opt/sovereignclaw
+EnvironmentFile=/etc/sovereignclaw.env
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node --use-env-proxy /opt/sovereignclaw/node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port 3000
+Restart=on-failure
+RestartSec=5
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

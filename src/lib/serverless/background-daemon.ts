@@ -1,87 +1,46 @@
+import { listTasks, planDay } from '../tasks/planner';
+import { randomUUID } from 'node:crypto';
 import { ServerlessJobRecord } from '../types';
 import { TriMemoryEngine } from '../memory/tri-memory';
 import { OpenShellSandbox } from '../sandbox/openshell';
-
-const jobHistory: ServerlessJobRecord[] = [
-  {
-    id: 'job_init_01',
-    jobType: 'NIGHTLY_CONSOLIDATION',
-    status: 'COMPLETED',
-    startedAt: new Date(Date.now() - 3600000 * 8).toISOString(),
-    completedAt: new Date(Date.now() - 3600000 * 8 + 42000).toISOString(),
-    logs: [
-      '[Nebius Serverless Worker] Spinning up A100-80GB compute instance...',
-      '[Consolidation] Ingested 14 episodic conversation fragments.',
-      '[Tri-Memory Graph] Created 3 new entity triples for project stack preferences.',
-      '[Consolidation] Pruned 2 low-confidence redundant memory vectors.',
-      '[Nebius Serverless] Job execution completed in 42.1s.'
-    ],
-    findingsCount: 3
-  }
-];
-
+import { getSettings, readRecords, saveRecord } from '../storage/local-store';
 export class NebiusServerlessDaemon {
-  public static listJobs(): ServerlessJobRecord[] {
-    return [...jobHistory].sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
+  static listJobs() {
+    return readRecords<ServerlessJobRecord>('jobs').sort((a, b) => b.startedAt.localeCompare(a.startedAt));
   }
-
-  public static async triggerJob(jobType: ServerlessJobRecord['jobType']): Promise<ServerlessJobRecord> {
-    const job: ServerlessJobRecord = {
-      id: `job_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      jobType,
-      status: 'RUNNING',
-      startedAt: new Date().toISOString(),
-      logs: [`[Nebius Serverless Worker] Initializing job ${jobType} on Nebius AI Cloud...`],
-      findingsCount: 0
-    };
-
-    jobHistory.unshift(job);
-
-    // Simulate async execution with real tasks
-    setTimeout(async () => {
-      try {
-        if (jobType === 'NIGHTLY_CONSOLIDATION') {
-          job.logs.push('[Nebius Serverless] Scanning episodic memories...');
-          const memories = TriMemoryEngine.getEpisodicMemories();
-          job.logs.push(`[Nebius Serverless] Evaluated ${memories.length} historical episodes.`);
-          
-          TriMemoryEngine.addKnowledgeTriple({
-            subject: 'User Workflow Pattern',
-            predicate: 'most_active_hours',
-            object: 'Prefers deep-work intervals between 09:00 - 13:00 UTC',
-            confidence: 0.94,
-            source: 'nebius_serverless_consolidation'
-          });
-
-          job.findingsCount = 1;
-          job.logs.push('[Nebius Serverless] Generated consolidated knowledge triple: "User Workflow Pattern"');
-        } else if (jobType === 'SKILL_SIMULATION') {
-          job.logs.push('[Nebius Serverless] Running batch verification across procedural skill registry in OpenShell...');
-          const skills = TriMemoryEngine.listSkills();
-          for (const skill of skills) {
-            const res = await OpenShellSandbox.execute(skill.code, skill.language, 4000);
-            job.logs.push(`[OpenShell Audit] Skill '${skill.name}': Exit code ${res.exitCode} (${res.durationMs}ms)`);
-          }
-          job.findingsCount = skills.length;
-        } else if (jobType === 'PROACTIVE_BRIEFING') {
-          job.logs.push('[Nebius Serverless] Synthesizing morning operational briefing...');
-          job.logs.push('[Briefing Engine] 0 high-priority schedule conflicts found.');
-          job.logs.push('[Briefing Engine] Hackathon build on track with 100% NemoClaw guardrail coverage.');
-          job.findingsCount = 2;
-        } else {
-          job.logs.push('[Nebius Serverless] Triage worker evaluated 0 unread messages.');
-          job.findingsCount = 0;
+  static async triggerJob(jobType: ServerlessJobRecord['jobType']) {
+    if (!getSettings().backgroundJobs) throw new Error('Enable background jobs in Privacy controls first.');
+    if (!['NIGHTLY_CONSOLIDATION','PROACTIVE_BRIEFING','SKILL_SIMULATION'].includes(jobType)) throw new Error('Unsupported job type; no inbox connector is configured.');
+    const job: ServerlessJobRecord = { id: randomUUID(), jobType, status: 'RUNNING', startedAt: new Date().toISOString(), logs: ['Local worker started (not Nebius Serverless).'], findingsCount: 0 };
+    saveRecord('jobs', job);
+    try {
+      if (jobType === 'SKILL_SIMULATION') {
+        if (!getSettings().executeSkills) throw new Error('Python tool execution is disabled.');
+        for (const skill of TriMemoryEngine.listSkills()) {
+          const res = await OpenShellSandbox.execute(skill.code, skill.language, 4000);
+          job.logs.push(`${skill.name}: ${res.success ? 'PASS' : 'FAIL'}: ${res.stdout || res.stderr}`);
+          if (!res.success) throw new Error(`Skill verification failed: ${skill.name}`);
+          job.findingsCount++;
         }
-
-        job.status = 'COMPLETED';
-        job.completedAt = new Date().toISOString();
-        job.logs.push(`[Nebius Serverless] Job completed successfully.`);
-      } catch (err: unknown) {
-        job.status = 'FAILED';
-        job.logs.push(`[Nebius Serverless Error] ${(err as Error)?.message || 'Worker execution failed'}`);
+      } else {
+        const memories = TriMemoryEngine.getEpisodicMemories();
+        const knowledge = TriMemoryEngine.getKnowledgeGraph();
+        job.findingsCount = memories.length;
+        job.logs.push(`Observed ${memories.length} saved episodes and ${knowledge.length} knowledge records.`);
+        const summary = knowledge.slice(-10).map(k => `${k.subject}: ${k.predicate} ${k.object}`).join('; ') || 'No personal facts saved yet.';
+        job.logs.push(summary);
+        const tasks = listTasks().filter(t => t.status === 'open');
+        const overdue = tasks.filter(t => t.dueAt && Date.parse(t.dueAt) < Date.now());
+        job.logs.push(`${tasks.length} open tasks; ${overdue.length} overdue.`);
+        for (const item of planDay(new Date(), 240).scheduled) job.logs.push(`${item.start}: ${item.task.title} (${item.task.durationMinutes} min)${item.deadlineRisk ? ' — deadline at risk' : ''}`);
+        job.findingsCount = tasks.length;
+        TriMemoryEngine.recordEpisode(jobType === 'PROACTIVE_BRIEFING' ? 'Personal briefing' : 'Memory review', summary, 'neutral', ['background', jobType]);
       }
-    }, 1500);
-
-    return job;
+      job.status = 'COMPLETED';
+    } catch (err) {
+      job.status = 'FAILED'; job.logs.push(err instanceof Error ? err.message : 'Worker failed');
+    }
+    job.completedAt = new Date().toISOString();
+    return saveRecord('jobs', job);
   }
 }

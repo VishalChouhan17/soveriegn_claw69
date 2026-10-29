@@ -2,7 +2,7 @@
   "name": "sovereign-claw",
   "version": "0.1.0",
   "license": "Apache-2.0",
-  "description": "Zero-Trust Autonomous Personal AI Operating System built on NVIDIA Nemotron and Nebius Token Factory for the NVIDIA x Nebius Global AI Hackathon (Personal AI Track).",
+  "description": "Private personal assistant with persistent memory, daily planning, reusable Python skills, and NVIDIA model inference through Nebius Token Factory.",
   "keywords": [
     "nvidia",
     "nebius",
@@ -14,11 +14,16 @@
     "hackathon"
   ],
   "scripts": {
-    "dev": "next dev",
+    "dev": "node --use-env-proxy node_modules/next/dist/bin/next dev --hostname 127.0.0.1",
     "build": "next build",
-    "start": "next start",
+    "start": "node --use-env-proxy node_modules/next/dist/bin/next start --hostname 127.0.0.1",
     "lint": "eslint",
-    "test:apis": "node test_apis.mjs"
+    "test:apis": "node test_apis.mjs",
+    "worker": "node --env-file-if-exists=.env.local scripts/worker.mjs",
+    "test:live": "node --env-file-if-exists=.env.local scripts/test-live.mjs",
+    "test:integration": "node scripts/test-integration.mjs",
+    "test:browser": "node scripts/test-integration.mjs --browser",
+    "test:provider": "node tests/provider.test.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",
@@ -35,7 +40,11 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.4.3",
+    "playwright-core": "1.57.0",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "engines": {
+    "node": ">=24"
   }
 }

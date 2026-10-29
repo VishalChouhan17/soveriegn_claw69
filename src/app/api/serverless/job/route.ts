@@ -1,22 +1,12 @@
-import { NextResponse } from 'next/server';
+import { connection } from 'next/server';
 import { NebiusServerlessDaemon } from '@/lib/serverless/background-daemon';
-
-export async function GET() {
-  const jobs = NebiusServerlessDaemon.listJobs();
-  return NextResponse.json({ jobs });
-}
-
+import { ServerlessJobRecord } from '@/lib/types';
+import { jsonBody, RequestError, errorResponse } from '@/lib/http/request';
+export async function GET() { await connection(); return Response.json({ jobs: NebiusServerlessDaemon.listJobs() }); }
 export async function POST(req: Request) {
   try {
-    const { jobType } = await req.json();
-
-    if (!jobType) {
-      return NextResponse.json({ error: 'jobType is required' }, { status: 400 });
-    }
-
-    const job = await NebiusServerlessDaemon.triggerJob(jobType);
-    return NextResponse.json({ success: true, job });
-  } catch (err: unknown) {
-    return NextResponse.json({ error: (err as Error)?.message || 'Serverless trigger error' }, { status: 500 });
-  }
+    const { jobType } = await jsonBody(req);
+    if (typeof jobType !== 'string' || !['NIGHTLY_CONSOLIDATION','PROACTIVE_BRIEFING','SKILL_SIMULATION'].includes(jobType)) throw new RequestError('Unsupported job type; no inbox connector configured');
+    return Response.json({ success: true, job: await NebiusServerlessDaemon.triggerJob(jobType as ServerlessJobRecord['jobType']) });
+  } catch(e) { return errorResponse(e); }
 }

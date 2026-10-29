@@ -1,22 +1,11 @@
-import { NextResponse } from 'next/server';
 import { SovereignAgentOrchestrator } from '@/lib/agent/orchestrator';
 import { ModelTier } from '@/lib/types';
-
+import { jsonBody, RequestError, errorResponse } from '@/lib/http/request';
 export async function POST(req: Request) {
   try {
-    const { prompt, tier = 'nemotron-3-ultra' } = await req.json();
-
-    if (!prompt || typeof prompt !== 'string') {
-      return NextResponse.json({ error: 'Prompt is required' }, { status: 400 });
-    }
-
-    const result = await SovereignAgentOrchestrator.processUserPrompt(prompt, tier as ModelTier);
-    return NextResponse.json(result);
-  } catch (error: unknown) {
-    console.error('Agent processing error:', error);
-    return NextResponse.json(
-      { error: (error as Error)?.message || 'Internal agent execution error' },
-      { status: 500 }
-    );
-  }
+    const { prompt, tier = 'nemotron-3-ultra' } = await jsonBody(req);
+    if (typeof prompt !== 'string' || !prompt.trim() || prompt.length > 8000) throw new RequestError('Prompt must be 1–8000 characters');
+    if (typeof tier !== 'string' || !['nemotron-nano','nemotron-super','nemotron-3-ultra','llama-3.1-nemotron-70b'].includes(tier)) throw new RequestError('Unknown NVIDIA model tier');
+    return Response.json(await SovereignAgentOrchestrator.processUserPrompt(prompt, tier as ModelTier));
+  } catch (e) { return errorResponse(e); }
 }

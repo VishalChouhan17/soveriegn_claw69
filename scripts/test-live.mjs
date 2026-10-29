@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+const headers = { 'Content-Type': 'application/json' };
+if (process.env.ASSISTANT_PASSWORD) headers.Authorization = `Basic ${Buffer.from(`owner:${process.env.ASSISTANT_PASSWORD}`).toString('base64')}`;
+const r = await fetch(`${process.env.ASSISTANT_URL || 'http://127.0.0.1:3000'}/api/chat`, { method: 'POST', headers, body: JSON.stringify({ prompt: 'In one sentence, explain how a private personal assistant can help plan daily work.' }), signal: AbortSignal.timeout(60000) });
+const d = await r.json();
+assert.equal(r.status, 200, d.error);
+assert.ok(!/demo|no inference/i.test(d.modelUsed), 'Demo responses do not count as NVIDIA inference');
+assert.ok(/nvidia|nemotron/i.test(d.modelUsed), 'Configure an NVIDIA open source model from the Nebius catalog');
+assert.ok(d.finalResponse?.length > 20);
+console.log(`Verified live model: ${d.modelUsed}`);
+console.log(d.finalResponse);

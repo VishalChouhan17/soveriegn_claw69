@@ -1,8 +1,6 @@
 import { NemoClawScanResult, RiskLevel, ApprovalRequest } from '../types';
 
-// In-memory enclave store for redacted private secrets that never leave the device
-const privateEnclaveStore = new Map<string, string>();
-const pendingApprovals = new Map<string, ApprovalRequest>();
+import { readRecords, saveRecord } from '../storage/local-store';
 
 const INJECTION_PATTERNS = [
   /ignore\s+(all\s+)?(previous|prior)\s+instructions/i,
@@ -19,7 +17,7 @@ const INJECTION_PATTERNS = [
 ];
 
 const PII_PATTERNS: Array<{ type: 'API_KEY' | 'EMAIL' | 'TOKEN' | 'SECRET'; regex: RegExp }> = [
-  { type: 'API_KEY', regex: /(?:nebius|nvapi|sk|ghp|gho|xoxb|aws_key)_[a-zA-Z0-9_\-]{16,64}/g },
+  { type: 'API_KEY', regex: /(?:nebius|nvapi|sk|ghp|gho|xoxb|aws_key)[_-][a-zA-Z0-9_\-]{16,}/g },
   { type: 'TOKEN', regex: /Bearer\s+([a-zA-Z0-9\-\._~\+\/]+=*)/g },
   { type: 'EMAIL', regex: /[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+/g }
 ];
@@ -55,7 +53,6 @@ export class NemoClawSecurityEngine {
     for (const { type, regex } of PII_PATTERNS) {
       sanitizedContent = sanitizedContent.replace(regex, (match) => {
         const secretId = `[ENCLAVE_${type}_${Math.random().toString(36).substring(2, 8).toUpperCase()}]`;
-        privateEnclaveStore.set(secretId, match);
         redactedEntities.push({
           type,
           original: match.replace(/.(?=.{4})/g, '*'), // Masked representation for audit
@@ -84,11 +81,7 @@ export class NemoClawSecurityEngine {
    * Unmasks redacted secrets safely on return when rendering locally
    */
   public static unmaskEnclaveContent(text: string): string {
-    let result = text;
-    for (const [placeholder, realSecret] of privateEnclaveStore.entries()) {
-      result = result.replaceAll(placeholder, realSecret);
-    }
-    return result;
+    return text; // Never restore private values into model-generated text.
   }
 
   /**
@@ -145,22 +138,23 @@ export class NemoClawSecurityEngine {
       timestamp: new Date().toISOString(),
       status: 'PENDING'
     };
-    pendingApprovals.set(request.id, request);
+    saveRecord('approvals', request);
     return request;
   }
 
   public static getApprovalRequest(id: string): ApprovalRequest | undefined {
-    return pendingApprovals.get(id);
+    return readRecords<ApprovalRequest>('approvals').find(a => a.id === id);
   }
 
   public static listPendingApprovals(): ApprovalRequest[] {
-    return Array.from(pendingApprovals.values()).filter(a => a.status === 'PENDING');
+    return readRecords<ApprovalRequest>('approvals').filter(a => a.status === 'PENDING');
   }
 
   public static resolveApproval(id: string, approved: boolean): boolean {
-    const req = pendingApprovals.get(id);
-    if (!req) return false;
+    const req = this.getApprovalRequest(id);
+    if (!req || req.status !== 'PENDING') return false;
     req.status = approved ? 'APPROVED' : 'REJECTED';
+    saveRecord('approvals', req);
     return true;
   }
 }

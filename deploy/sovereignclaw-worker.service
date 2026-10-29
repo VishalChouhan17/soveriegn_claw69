@@ -1,0 +1,17 @@
+[Unit]
+Description=SovereignClaw daily briefing worker
+After=network-online.target sovereignclaw.service
+Wants=sovereignclaw.service
+
+[Service]
+Type=simple
+User=sovereign
+WorkingDirectory=/opt/sovereignclaw
+EnvironmentFile=/etc/sovereignclaw.env
+ExecStart=/usr/bin/node /opt/sovereignclaw/scripts/worker.mjs
+Restart=on-failure
+RestartSec=5
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

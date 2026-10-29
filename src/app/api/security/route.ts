@@ -1,31 +1,21 @@
-import { NextResponse } from 'next/server';
+import { connection } from 'next/server';
 import { NemoClawSecurityEngine } from '@/lib/security/nemoclaw';
-
+import { jsonBody, RequestError, errorResponse } from '@/lib/http/request';
 export async function GET() {
-  const pendingApprovals = NemoClawSecurityEngine.listPendingApprovals();
-  return NextResponse.json({
-    pendingApprovals,
-    enclaveActive: true,
-    policyVersion: 'NemoClaw-v2.4-ZeroTrust'
-  });
+  await connection();
+  return Response.json({ pendingApprovals: NemoClawSecurityEngine.listPendingApprovals(), enclaveActive: false, policyVersion: 'Local heuristic filter v1 (not NVIDIA NemoClaw)' });
 }
-
 export async function POST(req: Request) {
   try {
-    const { action, id, approved, testPrompt } = await req.json();
-
+    const { action, id, approved, testPrompt } = await jsonBody(req);
     if (action === 'test_scan') {
-      const scanResult = NemoClawSecurityEngine.scanAndSanitize(testPrompt || '');
-      return NextResponse.json({ scanResult });
+      if (typeof testPrompt !== 'string' || testPrompt.length > 8000) throw new RequestError('Test prompt must be a string of at most 8000 characters');
+      return Response.json({ scanResult: NemoClawSecurityEngine.scanAndSanitize(testPrompt) });
     }
-
     if (action === 'resolve_approval') {
-      const success = NemoClawSecurityEngine.resolveApproval(id, Boolean(approved));
-      return NextResponse.json({ success });
+      if (typeof id !== 'string' || typeof approved !== 'boolean') throw new RequestError('Review ID and boolean decision required');
+      return Response.json({ success: NemoClawSecurityEngine.resolveApproval(id, approved) });
     }
-
-    return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
-  } catch (err: unknown) {
-    return NextResponse.json({ error: (err as Error)?.message || 'Security endpoint error' }, { status: 500 });
-  }
+    throw new RequestError('Invalid action');
+  } catch(e) { return errorResponse(e); }
 }

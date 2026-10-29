@@ -1,6 +1,8 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useSyncExternalStore } from 'react';
+import { DailyPlanner } from '@/components/daily-planner';
+import { PrivacyControls } from '@/components/privacy-controls';
 import {
   Shield,
   Cpu,
@@ -53,27 +55,24 @@ interface ChatMessage {
   };
 }
 
-type Tab = 'cockpit' | 'memory' | 'skills' | 'security' | 'cloud';
+type Tab = 'planner' | 'cockpit' | 'memory' | 'skills' | 'security' | 'cloud';
 
 /* ─── Theme Hook ─────────────────────────────────────────────────────────── */
+function subscribeTheme(notify: () => void) {
+  window.addEventListener('storage', notify);
+  window.addEventListener('sovereign-theme', notify);
+  return () => { window.removeEventListener('storage', notify); window.removeEventListener('sovereign-theme', notify); };
+}
 function useTheme() {
-  const [theme, setTheme] = useState<'light' | 'dark'>('light');
-
-  useEffect(() => {
-    const saved = localStorage.getItem('sc-theme') as 'light' | 'dark' | null;
-    const applied = document.documentElement.getAttribute('data-theme') as 'light' | 'dark';
-    setTheme(saved || applied || 'light');
-  }, []);
-
+  const theme = useSyncExternalStore(subscribeTheme,
+    () => document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light',
+    () => 'light');
   const toggle = useCallback(() => {
-    setTheme((prev) => {
-      const next = prev === 'light' ? 'dark' : 'light';
-      document.documentElement.setAttribute('data-theme', next);
-      localStorage.setItem('sc-theme', next);
-      return next;
-    });
+    const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    try { localStorage.setItem('sc-theme', next); } catch { /* storage unavailable */ }
+    window.dispatchEvent(new Event('sovereign-theme'));
   }, []);
-
   return { theme, toggle };
 }
 
@@ -83,7 +82,8 @@ export default function SovereignClawApp() {
 
   const [activeTab, setActiveTab] = useState<Tab>('cockpit');
   const [modelTier, setModelTier] = useState<ModelTier>('nemotron-3-ultra');
-  const [userSession, setUserSession] = useState<'OWNER' | 'JUDGE_AUDIT'>('OWNER');
+  const userSession = 'OWNER';
+  const [actionNotice, setActionNotice] = useState('');
   const [inputPrompt, setInputPrompt] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -92,9 +92,9 @@ export default function SovereignClawApp() {
       id: 'm1',
       sender: 'assistant',
       content:
-        '**SovereignClaw OS is online.**\n\nHardware-secured personal assistant connected to the Nebius Token Factory GPU infrastructure. Private tokens and credentials reside in your local NVIDIA NemoClaw cryptographic enclave, and all synthesized code executes within isolated NVIDIA OpenShell container boundaries.\n\nChoose a scenario below or type an instruction to begin.',
+        '**SovereignClaw is ready.**\n\nYour memory is stored on your private server. Choose which memory and Python tools the assistant may use in Privacy controls. Live NVIDIA Nemotron responses require Nebius credentials; demo mode is explicitly labeled.\n\nChoose a scenario below or type an instruction to begin.',
       timestamp: 'Online',
-      modelUsed: 'nvidia/Nemotron-3-Ultra-550b',
+      modelUsed: 'Awaiting configured inference',
     },
   ]);
 
@@ -109,7 +109,7 @@ export default function SovereignClawApp() {
   const [forgeName, setForgeName] = useState('');
   const [forgeDesc, setForgeDesc] = useState('');
   const [forgeCode, setForgeCode] = useState(
-    `def custom_skill():\n    print("Verified in OpenShell sandbox.")\n\ncustom_skill()`
+    `def custom_skill():\n    print("Verified in Isolated Python sandbox.")\n\ncustom_skill()`
   );
   const [forgeStatus, setForgeStatus] = useState<string | null>(null);
 
@@ -119,8 +119,46 @@ export default function SovereignClawApp() {
   const [testSecurityOutput, setTestSecurityOutput] = useState<NemoClawScanResult | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [selectedNode, setSelectedNode] = useState<string | null>(null);
+  const selectedNode: string | null = null;
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  /* ─── API Handlers ───────────────────────────────────────────────────── */
+  const fetchMemory = async () => {
+    try {
+      const res = await fetch('/api/memory');
+      const data = await res.json();
+      if (data.knowledge) setKnowledgeGraph(data.knowledge);
+      if (data.episodes) setEpisodicHistory(data.episodes);
+    } catch (e) { console.error(e); }
+  };
+
+  const fetchSkills = useCallback(async () => {
+    try {
+      const res = await fetch('/api/skills');
+      const data = await res.json();
+      if (data.skills) {
+        setSkills(data.skills);
+        if (data.skills.length > 0) setSelectedSkill(current => current || data.skills[0]);
+      }
+    } catch (e) { console.error(e); }
+  }, []);
+
+  const fetchJobs = async () => {
+    try {
+      const res = await fetch('/api/serverless/job');
+      const data = await res.json();
+      if (data.jobs) setJobs(data.jobs);
+    } catch (e) { console.error(e); }
+  };
+
+  const fetchSecurity = async () => {
+    try {
+      const res = await fetch('/api/security');
+      const data = await res.json();
+      if (data.pendingApprovals) setPendingApprovals(data.pendingApprovals);
+    } catch (e) { console.error(e); }
+  };
+
 
   /* ─── Data Fetching ─────────────────────────────────────────────────── */
   useEffect(() => {
@@ -128,7 +166,13 @@ export default function SovereignClawApp() {
     fetchSkills();
     fetchJobs();
     fetchSecurity();
-  }, []);
+    fetch('/api/history').then(r => { if (!r.ok) throw new Error('History unavailable'); return r.json(); }).then(d => {
+      if (d.conversations?.length) setMessages(current => current.length === 1 && current[0].id === 'm1' ? d.conversations.flatMap((c: { id: string; timestamp: string; prompt: string; response: string; modelUsed: string }) => [
+        { id: c.id + '_user', sender: 'user', content: c.prompt, timestamp: new Date(c.timestamp).toLocaleString() },
+        { id: c.id + '_assistant', sender: 'assistant', content: c.response, timestamp: new Date(c.timestamp).toLocaleString(), modelUsed: c.modelUsed },
+      ]) : current);
+    }).catch(console.error);
+  }, [fetchSkills]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -147,12 +191,12 @@ export default function SovereignClawApp() {
     const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
 
     const nodes = [
-      { id: 'user', label: 'User Enclave', x: 100, y: 130, color: '#34d399', desc: 'Hardware Edge Enclave' },
-      { id: 'nemoclaw', label: 'NemoClaw', x: 260, y: 75, color: '#fbbf24', desc: 'Zero-Egress PII Shield' },
-      { id: 'nemotron', label: 'Nemotron Ultra', x: 440, y: 130, color: '#76b900', desc: '550B Reasoning DAG' },
-      { id: 'openshell', label: 'OpenShell', x: 610, y: 75, color: '#38bdf8', desc: '512MB Kernel Jail' },
-      { id: 'nebius', label: 'Nebius H100', x: 760, y: 130, color: '#818cf8', desc: 'SXM5 GPU Inference' },
-      { id: 'skills', label: 'Hermes Skills', x: 610, y: 195, color: '#c084fc', desc: 'Executable Skill Repo' },
+      { id: 'user', label: 'User Enclave', x: 100, y: 130, color: '#34d399', desc: 'Private server memory' },
+      { id: 'nemoclaw', label: 'Local Privacy Filter', x: 260, y: 75, color: '#fbbf24', desc: 'Heuristic PII redaction' },
+      { id: 'nemotron', label: 'Nemotron Ultra', x: 440, y: 130, color: '#76b900', desc: 'Configured NVIDIA model' },
+      { id: 'openshell', label: 'Isolated Python', x: 610, y: 75, color: '#38bdf8', desc: 'Linux namespace isolation' },
+      { id: 'nebius', label: 'Nebius API', x: 760, y: 130, color: '#818cf8', desc: 'Configured NVIDIA model' },
+      { id: 'skills', label: 'Reusable Skills', x: 610, y: 195, color: '#c084fc', desc: 'Executable Skill Repo' },
       { id: 'memory', label: 'Tri-Memory', x: 260, y: 195, color: '#fb7185', desc: 'Episodic + Graph Store' },
     ];
 
@@ -254,43 +298,6 @@ export default function SovereignClawApp() {
     return () => cancelAnimationFrame(animId);
   }, [activeTab, selectedNode, theme]);
 
-  /* ─── API Handlers ───────────────────────────────────────────────────── */
-  const fetchMemory = async () => {
-    try {
-      const res = await fetch('/api/memory');
-      const data = await res.json();
-      if (data.knowledge) setKnowledgeGraph(data.knowledge);
-      if (data.episodes) setEpisodicHistory(data.episodes);
-    } catch (e) { console.error(e); }
-  };
-
-  const fetchSkills = async () => {
-    try {
-      const res = await fetch('/api/skills');
-      const data = await res.json();
-      if (data.skills) {
-        setSkills(data.skills);
-        if (data.skills.length > 0 && !selectedSkill) setSelectedSkill(data.skills[0]);
-      }
-    } catch (e) { console.error(e); }
-  };
-
-  const fetchJobs = async () => {
-    try {
-      const res = await fetch('/api/serverless/job');
-      const data = await res.json();
-      if (data.jobs) setJobs(data.jobs);
-    } catch (e) { console.error(e); }
-  };
-
-  const fetchSecurity = async () => {
-    try {
-      const res = await fetch('/api/security');
-      const data = await res.json();
-      if (data.pendingApprovals) setPendingApprovals(data.pendingApprovals);
-    } catch (e) { console.error(e); }
-  };
-
   const handleSendMessage = async (textToSend?: string) => {
     const text = textToSend || inputPrompt;
     if (!text.trim() || isProcessing) return;
@@ -316,7 +323,7 @@ export default function SovereignClawApp() {
       const assistantMsg: ChatMessage = {
         id: `msg_${Date.now()}_resp`,
         sender: 'assistant',
-        content: data.finalResponse || 'No response returned.',
+        content: data.finalResponse || data.error || 'No response returned.',
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         dagSteps: data.dagSteps,
         modelUsed: data.modelUsed,
@@ -344,11 +351,13 @@ export default function SovereignClawApp() {
 
   const handleResolveApproval = async (id: string, approved: boolean) => {
     try {
-      await fetch('/api/security', {
+      const response = await fetch('/api/security', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'resolve_approval', id, approved }),
       });
+      const result = await response.json();
+      if (!response.ok || !result.success) { setActionNotice(result.error || 'Review could not be recorded'); return; }
       fetchSecurity();
       setMessages((prev) => [
         ...prev,
@@ -356,7 +365,7 @@ export default function SovereignClawApp() {
           id: `appr_${Date.now()}`,
           sender: 'assistant',
           content: approved
-            ? `✅ **Action Approved** — Enclave signature verified. Tool execution authorized.`
+            ? `✅ **Review recorded** — no destructive action was executed.`
             : `🛑 **Action Quarantined** — Action rejected. Execution halted by operator.`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         },
@@ -366,7 +375,7 @@ export default function SovereignClawApp() {
 
   const handleForgeSkill = async () => {
     if (!forgeName || !forgeCode) return;
-    setForgeStatus('Submitting to NVIDIA OpenShell sandbox for static verification…');
+    setForgeStatus('Submitting to isolated Python sandbox for static verification…');
     try {
       const res = await fetch('/api/skills', {
         method: 'POST',
@@ -390,11 +399,14 @@ export default function SovereignClawApp() {
 
   const handleTriggerServerless = async (jobType: ServerlessJobRecord['jobType']) => {
     try {
-      await fetch('/api/serverless/job', {
+      const response = await fetch('/api/serverless/job', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ jobType }),
       });
+      const result = await response.json();
+      if (!response.ok) { setActionNotice(result.error || 'Job failed'); return; }
+      setActionNotice(`Job ${result.job.status.toLowerCase()}. See its saved logs below.`);
       fetchJobs();
       setTimeout(fetchJobs, 2000);
     } catch (e) { console.error(e); }
@@ -414,21 +426,21 @@ export default function SovereignClawApp() {
 
   const handleExportAuditLog = () => {
     const logData = {
-      enclaveId: 'sovereign_enclave_0x76B900',
-      attestationAuthority: 'NVIDIA NemoClaw Policy Engine v2.4',
+      application: 'SovereignClaw',
+      policy: 'Local heuristic checks; no hardware attestation',
       timestamp: new Date().toISOString(),
       activeIdentity: userSession,
       threatScanHistory: testSecurityOutput ? [testSecurityOutput] : [],
       knowledgeNodes: knowledgeGraph.length,
       skillsVerified: skills.filter((s) => s.verifiedInSandbox).length,
-      sandboxSecurityStatus: 'ZERO_EGRESS_VERIFIED',
-      modelServing: 'Nebius Token Factory H100 SXM5',
+      sandboxSecurityStatus: 'Linux bubblewrap; see individual execution results',
+      modelServing: 'Configured Nebius endpoint; see response metadata',
     };
     const blob = new Blob([JSON.stringify(logData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `nemoclaw_attestation_${Date.now()}.json`;
+    a.download = `sovereignclaw_audit_${Date.now()}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -437,24 +449,26 @@ export default function SovereignClawApp() {
   const navItems: Array<{ id: Tab; label: string; icon: React.ReactNode; badge?: number | string; badgeType?: 'default' | 'alert' }> = [
     { id: 'cockpit', label: 'Command Cockpit', icon: <Terminal size={14} /> },
     { id: 'memory', label: 'Tri-Memory Brain', icon: <Database size={14} />, badge: knowledgeGraph.length },
-    { id: 'skills', label: 'Hermes Skill Forge', icon: <Wrench size={14} />, badge: skills.length },
+    { id: 'planner', label: 'Daily Planner', icon: <Clock size={14} /> },
+    { id: 'skills', label: 'Reusable Skill Forge', icon: <Wrench size={14} />, badge: skills.length },
     {
       id: 'security',
-      label: 'NemoClaw Enclave',
+      label: 'Privacy & Review',
       icon: <Shield size={14} />,
       badge: pendingApprovals.length > 0 ? `${pendingApprovals.length} pending` : undefined,
       badgeType: pendingApprovals.length > 0 ? 'alert' : 'default',
     },
-    { id: 'cloud', label: 'Nebius Serverless', icon: <Server size={14} />, badge: jobs.length },
+    { id: 'cloud', label: 'Local Background Jobs', icon: <Server size={14} />, badge: jobs.length },
   ];
 
   /* ─── Page Titles ────────────────────────────────────────────────────── */
   const pageMeta: Record<Tab, { title: string; subtitle: string }> = {
-    cockpit: { title: 'Command Cockpit', subtitle: 'Nemotron 3 Ultra reasoning pipeline · OpenShell isolated execution' },
+    planner: { title: 'Daily Planner', subtitle: 'Your priorities · local planning · opt-in NVIDIA assistance' },
+    cockpit: { title: 'Command Cockpit', subtitle: 'NVIDIA model inference · selected local tools' },
     memory: { title: 'Tri-Memory Brain', subtitle: 'Associative knowledge graph · Episodic interaction log · Procedural memory' },
-    skills: { title: 'Hermes Skill Forge', subtitle: 'Compile & verify executable Python skills in NVIDIA OpenShell sandbox' },
-    security: { title: 'NemoClaw Enclave', subtitle: 'Zero-trust prompt firewall · PII redaction · Human-in-the-loop gates' },
-    cloud: { title: 'Nebius Serverless', subtitle: 'Background daemon jobs · H100 SXM5 GPU inference · Async memory consolidation' },
+    skills: { title: 'Reusable Skill Forge', subtitle: 'Verify and save network-isolated Python skills' },
+    security: { title: 'Privacy & Review', subtitle: 'Zero-trust prompt firewall · PII redaction · Human-in-the-loop gates' },
+    cloud: { title: 'Local Background Jobs', subtitle: 'Persistent local jobs · daily briefing worker' },
   };
 
   /* ─── Render ─────────────────────────────────────────────────────────── */
@@ -504,7 +518,7 @@ export default function SovereignClawApp() {
             className="chip live"
             style={{ fontSize: '0.6rem', padding: '3px 8px', width: '100%', justifyContent: 'flex-start' }}
           >
-            Nebius H100 SXM5 · 24ms TTFT
+            Check inference mode above
           </div>
 
           {/* Model Selector */}
@@ -515,9 +529,9 @@ export default function SovereignClawApp() {
               onChange={(e) => setModelTier(e.target.value as ModelTier)}
               style={{ flex: 1, minWidth: 0 }}
             >
-              <option value="nemotron-3-ultra">Nemotron 3 Ultra</option>
-              <option value="nemotron-super">Nemotron Super (120B)</option>
-              <option value="nemotron-nano">Nemotron Nano (Fast)</option>
+              <option value="nemotron-3-ultra">Primary NVIDIA model</option>
+              <option value="nemotron-super">NVIDIA model: balanced alias</option>
+              <option value="nemotron-nano">NVIDIA model: fast alias</option>
             </select>
           </div>
 
@@ -525,14 +539,7 @@ export default function SovereignClawApp() {
           <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
             <div className="session-selector" style={{ flex: 1 }}>
               <Lock size={10} />
-              <select
-                value={userSession}
-                onChange={(e) => setUserSession(e.target.value as 'OWNER' | 'JUDGE_AUDIT')}
-                style={{ flex: 1, minWidth: 0 }}
-              >
-                <option value="OWNER">Owner</option>
-                <option value="JUDGE_AUDIT">Judge Audit</option>
-              </select>
+              <span>Owner workspace</span>
             </div>
             <button className="theme-toggle" onClick={toggleTheme} title="Toggle theme">
               {theme === 'light' ? <Moon size={13} /> : <Sun size={13} />}
@@ -555,10 +562,13 @@ export default function SovereignClawApp() {
             <div className="chip" style={{ display: 'none' }} />
             <button className="attest-btn" onClick={handleExportAuditLog}>
               <ArrowUpRight size={11} />
-              Attestation Export
+              Export Local Audit
             </button>
           </div>
         </header>
+        <PrivacyControls onMemoryChanged={deleted => { void fetchMemory(); if (deleted) { setMessages([]); void fetchJobs(); void fetchSecurity(); } }} />
+        {actionNotice && <p role="status" className="privacy-controls">{actionNotice}</p>}
+        {activeTab === 'planner' && <DailyPlanner askAssistant={prompt => { setActiveTab('cockpit'); void handleSendMessage(prompt); }} />}
 
         {/* ══════════════════════════════════════════════════ */}
         {/* TAB 1: COMMAND COCKPIT                           */}
@@ -579,7 +589,7 @@ export default function SovereignClawApp() {
                     ) : (
                       <span className="message-model">
                         <Cpu size={11} />
-                        {msg.modelUsed || 'Nemotron 3 Ultra'}
+                        {msg.modelUsed || 'Local assistant'}
                       </span>
                     )}
                     <span className="message-time">{msg.timestamp}</span>
@@ -627,7 +637,7 @@ export default function SovereignClawApp() {
                             onClick={() => handleResolveApproval(msg.approvalRequired!.requestId, true)}
                           >
                             <Check size={11} />
-                            Authorize with Enclave Key
+                            Record approval (no destructive tool configured)
                           </button>
                           <button
                             className="btn btn-secondary btn-sm"
@@ -693,7 +703,7 @@ export default function SovereignClawApp() {
                     <div className="processing-dot" />
                     <div className="processing-dot" />
                   </div>
-                  <span>Nemotron 3 Ultra formulating reasoning plan…</span>
+                  <span>Processing your request…</span>
                 </div>
               )}
               <div ref={messagesEndRef} />
@@ -719,7 +729,7 @@ export default function SovereignClawApp() {
                 </span>
                 <button
                   className="scenario-chip"
-                  onClick={() => handleSendMessage('Calculate my portfolio risk with Sharpe ratio and volatility.')}
+                  onClick={() => handleSendMessage('Run the portfolio risk example skill and explain that its inputs are sample data.')}
                 >
                   📊 Portfolio Risk
                 </button>
@@ -733,15 +743,15 @@ export default function SovereignClawApp() {
                 </button>
                 <button
                   className="scenario-chip"
-                  onClick={() => handleSendMessage('Optimize my calendar schedule and resolve overlapping conflicts.')}
+                  onClick={() => handleSendMessage('Help me plan my open tasks and identify deadline risks using the context I chose to share.')}
                 >
-                  📅 Schedule Optimizer
+                  📅 Discuss My Tasks
                 </button>
                 <button
                   className="scenario-chip"
-                  onClick={() => handleSendMessage('Verify enclave cryptographic attestation signature.')}
+                  onClick={() => handleSendMessage('Explain what personal information is shared with the cloud model.')}
                 >
-                  🔑 Hardware Attestation
+                  🔑 Local Audit
                 </button>
                 <button
                   className="scenario-chip danger"
@@ -764,7 +774,7 @@ export default function SovereignClawApp() {
                     type="text"
                     value={inputPrompt}
                     onChange={(e) => setInputPrompt(e.target.value)}
-                    placeholder="Ask SovereignClaw to analyze risk, verify attestation, or execute a workflow…"
+                    placeholder="Ask SovereignClaw to plan your day, use saved context, or run a chosen skill…"
                     disabled={isProcessing}
                   />
                   <button
@@ -900,7 +910,7 @@ export default function SovereignClawApp() {
                 <div className="card-header">
                   <div className="card-title">
                     <Wrench size={14} />
-                    Nous Hermes Skills
+                    Nous Reusable Skills
                   </div>
                   <button className="btn btn-ghost btn-sm" onClick={fetchSkills}>
                     <RefreshCw size={11} />
@@ -960,7 +970,7 @@ export default function SovereignClawApp() {
                           className={`view-toggle-btn${skillViewMode === 'yaml' ? ' active' : ''}`}
                           onClick={() => setSkillViewMode('yaml')}
                         >
-                          Hermes Spec
+                          Skill Manifest
                         </button>
                       </div>
                     </div>
@@ -971,13 +981,13 @@ export default function SovereignClawApp() {
                       <div className="sandbox-bar" style={{ marginTop: 10 }}>
                         <div className="sandbox-metrics">
                           <span className="sandbox-metric">
-                            RAM: <strong>14.2MB / 512MB</strong>
+                            Limit: <strong>256 MiB</strong>
                           </span>
                           <span className="sandbox-metric">
-                            CPU: <strong style={{ color: 'var(--text-secondary)' }}>100% quota</strong>
+                            CPU: <strong>3 second limit</strong>
                           </span>
                           <span className="sandbox-metric">
-                            Seccomp: <strong>ENFORCED</strong>
+                            Network: <strong>separate namespace</strong>
                           </span>
                         </div>
                         <button
@@ -985,7 +995,7 @@ export default function SovereignClawApp() {
                           onClick={() => handleSendMessage(`Execute skill ${selectedSkill.name}`)}
                         >
                           <Play size={11} />
-                          Test in OpenShell
+                          Test in Isolated Python
                         </button>
                       </div>
                     </div>
@@ -997,7 +1007,7 @@ export default function SovereignClawApp() {
                   <div className="card-header">
                     <div className="card-title">
                       <Plus size={14} />
-                      Compile New Hermes Skill
+                      Compile New Python Skill
                     </div>
                   </div>
                   <div className="card-body">
@@ -1025,7 +1035,7 @@ export default function SovereignClawApp() {
                         onChange={(e) => setForgeCode(e.target.value)}
                       />
                       <button className="btn btn-secondary" onClick={handleForgeSkill}>
-                        Verify in OpenShell &amp; Register Skill
+                        Verify in Isolated Python &amp; Register Skill
                       </button>
                       {forgeStatus && (
                         <div className="forge-status">{forgeStatus}</div>
@@ -1054,7 +1064,7 @@ export default function SovereignClawApp() {
                 </div>
                 <div className="card-body">
                   <p style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', lineHeight: 1.6, marginBottom: 10 }}>
-                    Test adversarial inputs or private API tokens. NemoClaw sanitizes payloads into the local enclave before inference.
+                    Test adversarial inputs or private API tokens. Local Privacy Filter sanitizes payloads before inference. Pattern checks are not a guarantee of complete redaction.
                   </p>
                   <textarea
                     className="scan-textarea"
@@ -1113,13 +1123,13 @@ export default function SovereignClawApp() {
                 </div>
               </div>
 
-              {/* Enclave Policy Matrix */}
+              {/* Local Policy Matrix */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 <div className="card">
                   <div className="card-header">
                     <div className="card-title">
                       <Lock size={14} />
-                      Enclave Policy Matrix
+                      Local Policy Matrix
                     </div>
                   </div>
                   <div className="card-body">
@@ -1127,22 +1137,22 @@ export default function SovereignClawApp() {
                       <div className="policy-item">
                         <CheckCircle2 className="policy-icon" />
                         <div>
-                          <div className="policy-title">Zero-Egress Private Vault</div>
-                          <p className="policy-desc">Private keys and identifiers remain inside local memory. Never sent to model.</p>
+                          <div className="policy-title">Local memory, opt-in cloud context</div>
+                          <p className="policy-desc">Detected sensitive entities are redacted. Review what you share; pattern checks cannot detect every secret.</p>
                         </div>
                       </div>
                       <div className="policy-item">
                         <CheckCircle2 className="policy-icon" />
                         <div>
-                          <div className="policy-title">OpenShell Kernel Isolation</div>
-                          <p className="policy-desc">All synthesized code bounded at 512MB RAM, seccomp jail, sub-second timeouts.</p>
+                          <div className="policy-title">Isolated Python Kernel Isolation</div>
+                          <p className="policy-desc">Python tools use Linux namespaces, a private temporary directory, resource limits, and an 8-second deadline. Unsupported hosts refuse execution.</p>
                         </div>
                       </div>
                       <div className="policy-item">
                         <CheckCircle2 className="policy-icon" />
                         <div>
-                          <div className="policy-title">Human-In-The-Loop Signatures</div>
-                          <p className="policy-desc">High-risk actions require explicit operator confirmation before execution.</p>
+                          <div className="policy-title">Owner review records</div>
+                          <p className="policy-desc">Destructive requests are held for review. This application does not implement a destructive file tool.</p>
                         </div>
                       </div>
                     </div>
@@ -1202,14 +1212,14 @@ export default function SovereignClawApp() {
             {/* Stat Cards */}
             <div className="grid-3">
               <div className="stat-card">
-                <div className="stat-label">Nebius GPU Cluster</div>
-                <div className="stat-value">H100 SXM5</div>
-                <div className="stat-sub" style={{ color: 'var(--emerald)' }}>Sub-20ms TTFT</div>
+                <div className="stat-label">Inference Provider</div>
+                <div className="stat-value">Nebius API</div>
+                <div className="stat-sub" style={{ color: 'var(--emerald)' }}>Live credentials required</div>
               </div>
               <div className="stat-card">
                 <div className="stat-label">Reasoning Engine</div>
-                <div className="stat-value">Nemotron Ultra</div>
-                <div className="stat-sub">550B · Dual-tier routing</div>
+                <div className="stat-value">NVIDIA model</div>
+                <div className="stat-sub">Owner-configured NVIDIA model</div>
               </div>
               <div className="stat-card">
                 <div className="stat-label">Async Daemon Jobs</div>
@@ -1255,7 +1265,7 @@ export default function SovereignClawApp() {
                     marginBottom: jobs.length > 0 ? 14 : 0,
                   }}
                 >
-                  Background tasks executed on Nebius Serverless compute endpoints. Jobs run asynchronously using the NVIDIA OpenShell execution model.
+                  Jobs execute on your private server. Run npm run worker under a process supervisor for daily briefings while the UI is closed.
                 </p>
                 {jobs.length === 0 && (
                   <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center', padding: '20px 0' }}>
@@ -1307,9 +1317,9 @@ export default function SovereignClawApp() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.6rem', color: 'var(--text-muted)', fontWeight: 500 }}>
             <span style={{ color: 'var(--accent-light)', fontWeight: 700 }}>SovereignClaw OS</span>
             <span>·</span>
-            <span>NVIDIA Nemotron 3 Ultra</span>
+            <span>NVIDIA model on Nebius</span>
             <span>·</span>
-            <span>Nebius Token Factory H100 SXM5</span>
+            <span>Nebius Token Factory (configured)</span>
           </div>
           <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)' }}>
             NVIDIA × Nebius Global AI Hackathon · Personal AI Track
