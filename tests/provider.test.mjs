@@ -36,3 +36,15 @@ test('empty provider output and insecure endpoints are rejected',async () => {
   await assert.rejects(client({NEBIUS_API_KEY:'test-only-fixture',NEBIUS_MODEL:'nvidia/test-nemotron'},async () => ({ok:true,json:async () => ({choices:[]})})).generateResponse('hello',options),/no completion/);
   await assert.rejects(client({NEBIUS_API_KEY:'test-only-fixture',NEBIUS_MODEL:'nvidia/test-nemotron',NEBIUS_BASE_URL:'http://example.invalid/v1'},() => {throw Error('unexpected fetch');}).generateResponse('hello',options),/HTTPS/);
 });
+
+test('legacy provider prefixes are normalized for overrides and tier configuration',async () => {
+  for (const setting of ['NEBIUS_MODEL','NEBIUS_MODEL_ULTRA']) {
+    let requested;
+    const r = await client({NEBIUS_API_KEY:'test-only-fixture',[setting]:'nebius/nvidia/test-nemotron'},async (_url,init) => {
+      requested = JSON.parse(init.body).model;
+      return {ok:true,json:async () => ({choices:[{message:{content:'Live fixture'}}]})};
+    }).generateResponse('hello',options);
+    assert.equal(requested,'nvidia/test-nemotron');
+    assert.equal(r.modelUsed,'nvidia/test-nemotron (Live Nebius Token Factory)');
+  }
+});

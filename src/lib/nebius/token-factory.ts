@@ -9,12 +9,14 @@ export class NebiusTokenFactoryClient {
   static async generateResponse(prompt: string, options: NemotronGenerationOptions) {
     const start = Date.now();
     const key = process.env.NEBIUS_API_KEY;
-    const model = process.env.NEBIUS_MODEL || ({
+    const configuredModel = process.env.NEBIUS_MODEL || ({
       'nemotron-nano': process.env.NEBIUS_MODEL_NANO,
       'nemotron-super': process.env.NEBIUS_MODEL_SUPER,
       'nemotron-3-ultra': process.env.NEBIUS_MODEL_ULTRA,
       'llama-3.1-nemotron-70b': process.env.NEBIUS_MODEL_LLAMA_NEMOTRON,
     }[options.modelTier]);
+    // Accept legacy configuration that accidentally includes the provider namespace.
+    const model = configuredModel?.replace(/^nebius\//, '');
     if (!key) {
       if (process.env.INFERENCE_MODE !== 'demo') throw new Error('Configure NEBIUS_API_KEY for live NVIDIA model inference, or explicitly set INFERENCE_MODE=demo for local testing.');
       return { text: 'DEMO MODE — no model was called. Local memory and selected tools work. Configure Nebius Token Factory credentials to receive NVIDIA Nemotron responses.', modelUsed: 'Local demo (no inference)', tokensUsed: 0, latencyMs: Date.now() - start };
@@ -34,6 +36,6 @@ export class NebiusTokenFactoryClient {
     const data = await response.json();
     const text = data.choices?.[0]?.message?.content;
     if (typeof text !== 'string' || !text.trim()) throw new Error('Nebius returned no completion');
-    return { text, modelUsed: model, tokensUsed: data.usage?.total_tokens || 0, latencyMs: Date.now() - start };
+    return { text, modelUsed: `${model} (Live Nebius Token Factory)`, tokensUsed: data.usage?.total_tokens || 0, latencyMs: Date.now() - start };
   }
 }
