@@ -2,6 +2,11 @@
 
 **Category: Personal AI Track.** SovereignClaw combines owner-controlled local memory, a daily task planner, reusable isolated Python skills, and NVIDIA model inference through Nebius Token Factory. A separate background worker produces a daily briefing while the browser is closed.
 
+> 🔑 **Live Demo Evaluation Credentials for Judges**:
+> When opening the live hosted deployment, use the HTTP Basic Auth owner credentials:
+> - **Username:** `owner`
+> - **Password:** `Vishal@8103` *(as configured in `ASSISTANT_PASSWORD`)*
+
 ## A concrete demo
 
 1. Save a preference such as “prefers deep work before noon” in Privacy controls.
