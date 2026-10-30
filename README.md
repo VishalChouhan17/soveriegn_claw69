@@ -5,7 +5,7 @@
 > 🔑 **Live Demo Evaluation Credentials for Judges**:
 > When opening the live hosted deployment, use the HTTP Basic Auth owner credentials:
 > - **Username:** `owner`
-> - **Password:** `Vishal@8103` *(as configured in `ASSISTANT_PASSWORD`)*
+> - **Password:** `owner` *(as configured in `ASSISTANT_PASSWORD`)*
 
 ## A concrete demo
 
