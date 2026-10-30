@@ -1,9 +1,19 @@
 import { mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync, unlinkSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { tmpdir } from 'node:os';
 
 // One atomic file per record avoids stale module caches and lost appends across workers.
-export const dataDirectory = () => resolve(/* turbopackIgnore: true */ process.env.SOVEREIGN_DATA_DIR || '.sovereign-data');
+export const dataDirectory = () => {
+  if (process.env.SOVEREIGN_DATA_DIR) {
+    return resolve(/* turbopackIgnore: true */ process.env.SOVEREIGN_DATA_DIR);
+  }
+  if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
+    return resolve(/* turbopackIgnore: true */ join(tmpdir(), 'sovereign-data'));
+  }
+  return resolve(/* turbopackIgnore: true */ '.sovereign-data');
+};
+
 function directory(collection: string) {
   const dir = join(/* turbopackIgnore: true */ dataDirectory(), collection);
   mkdirSync(dir, { recursive: true, mode: 0o700 });

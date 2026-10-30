@@ -76,6 +76,173 @@ function useTheme() {
   return { theme, toggle };
 }
 
+function renderInlineStyles(text: string) {
+  const parts = text.split(/(`[^`]+`)/g);
+  return parts.map((part, idx) => {
+    if (part.startsWith('`') && part.endsWith('`')) {
+      return (
+        <code
+          key={idx}
+          style={{
+            fontFamily: 'monospace',
+            fontSize: '0.82em',
+            background: 'var(--bg-elevated)',
+            padding: '2px 5px',
+            borderRadius: 4,
+            border: '1px solid var(--border)',
+          }}
+        >
+          {part.slice(1, -1)}
+        </code>
+      );
+    }
+    const boldParts = part.split(/(\*\*[^*]+\*\*)/g);
+    return boldParts.map((bPart, bIdx) => {
+      if (bPart.startsWith('**') && bPart.endsWith('**')) {
+        return (
+          <strong key={`${idx}-${bIdx}`} style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
+            {bPart.slice(2, -2)}
+          </strong>
+        );
+      }
+      return bPart;
+    });
+  });
+}
+
+function FormattedContent({ text }: { text: string }) {
+  if (!text) return null;
+  const lines = text.split('\n');
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
+      {lines.map((line, i) => {
+        const trimmed = line.trim();
+        if (!trimmed) {
+          return <div key={i} style={{ height: '3px' }} />;
+        }
+
+        // Security alert banner
+        if (trimmed.includes('NemoClaw Security Alert') || trimmed.includes('Action Approval Gate Active')) {
+          return (
+            <div
+              key={i}
+              style={{
+                background: 'var(--rose-bg)',
+                border: '1px solid rgba(225,29,72,0.3)',
+                borderLeft: '4px solid var(--rose)',
+                borderRadius: '6px',
+                padding: '8px 12px',
+                fontWeight: 600,
+                color: 'var(--rose)',
+              }}
+            >
+              {renderInlineStyles(trimmed)}
+            </div>
+          );
+        }
+
+        // Bracket heading: e.g. [Nemotron 3 Ultra Reasoning: ...]
+        if (trimmed.startsWith('[') && trimmed.includes(']')) {
+          return (
+            <div
+              key={i}
+              style={{
+                background: 'var(--accent-bg)',
+                border: '1px solid var(--accent-border)',
+                borderLeft: '3px solid var(--accent)',
+                borderRadius: '6px',
+                padding: '6px 10px',
+                fontWeight: 700,
+                fontSize: '0.85rem',
+                color: 'var(--accent)',
+              }}
+            >
+              {renderInlineStyles(trimmed.replace(/^\[|\]$/g, ''))}
+            </div>
+          );
+        }
+
+        // Markdown headings (#, ##, ###)
+        if (trimmed.startsWith('#')) {
+          const headingText = trimmed.replace(/^#+\s*/, '');
+          return (
+            <div
+              key={i}
+              style={{
+                fontWeight: 800,
+                fontSize: '0.92rem',
+                color: 'var(--accent)',
+                marginTop: '4px',
+                borderBottom: '1px solid var(--border)',
+                paddingBottom: '3px',
+              }}
+            >
+              {renderInlineStyles(headingText)}
+            </div>
+          );
+        }
+
+        // Bullet list item
+        if (trimmed.startsWith('•') || trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+          const itemText = trimmed.replace(/^[•\-\*]\s*/, '');
+          return (
+            <div
+              key={i}
+              style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '8px',
+                paddingLeft: '4px',
+                lineHeight: 1.55,
+              }}
+            >
+              <span style={{ color: 'var(--accent)', fontWeight: 'bold' }}>•</span>
+              <span style={{ flex: 1 }}>{renderInlineStyles(itemText)}</span>
+            </div>
+          );
+        }
+
+        // Numbered list item
+        const numMatch = trimmed.match(/^(\d+)\.\s+(.*)$/);
+        if (numMatch) {
+          return (
+            <div
+              key={i}
+              style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '8px',
+                paddingLeft: '4px',
+                lineHeight: 1.55,
+              }}
+            >
+              <span
+                style={{
+                  color: 'var(--accent)',
+                  fontWeight: 700,
+                  fontSize: '0.85rem',
+                  minWidth: '16px',
+                }}
+              >
+                {numMatch[1]}.
+              </span>
+              <span style={{ flex: 1 }}>{renderInlineStyles(numMatch[2])}</span>
+            </div>
+          );
+        }
+
+        // Standard paragraph
+        return (
+          <p key={i} style={{ margin: 0, lineHeight: 1.6 }}>
+            {renderInlineStyles(trimmed)}
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
 /* ─── Main Component ─────────────────────────────────────────────────────── */
 export default function SovereignClawApp() {
   const { theme, toggle: toggleTheme } = useTheme();
@@ -621,7 +788,7 @@ export default function SovereignClawApp() {
                         : 'assistant-bubble'
                     }`}
                   >
-                    {msg.content}
+                    <FormattedContent text={msg.content} />
 
                     {/* HITL Gate */}
                     {msg.approvalRequired && (
